@@ -93,20 +93,12 @@ export function OffchainSign() {
   }
 
   return (
-    <div className="flex flex-col items-center space-y-6 p-6 max-w-2xl mx-auto">
+    <div className="flex flex-col items-center space-y-6 p-6 max-w-2xl mx-auto border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
       <div className="text-center">
         <h2 className="text-2xl font-bold mb-2">Sign Message</h2>
         <p className="text-gray-600 dark:text-gray-400">
           Sign any message to prove wallet ownership (no fees)
         </p>
-      </div>
-
-      {/* Debug info */}
-      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-lg p-3 text-sm">
-        <p><strong>Wallet:</strong> {wallet?.adapter?.name || 'Unknown'}</p>
-        <p><strong>Connected:</strong> {connected ? 'Yes' : 'No'}</p>
-        <p><strong>Public Key:</strong> {publicKey?.toString().slice(0, 20)}...</p>
-        <p><strong>Sign Message Support:</strong> {signMessage ? 'Yes' : 'No'}</p>
       </div>
 
       <div className="w-full space-y-4">
@@ -204,16 +196,6 @@ export function OffchainSign() {
           </div>
         </div>
       )}
-
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 w-full">
-        <h3 className="font-medium text-blue-800 dark:text-blue-200 mb-2">ℹ️ About Message Signing</h3>
-        <ul className="text-blue-700 dark:text-blue-300 text-sm space-y-1">
-          <li>• No network fees - completely free</li>
-          <li>• Instant verification of wallet ownership</li>
-          <li>• Signature is cryptographically secure</li>
-          <li>• Message is not stored on the blockchain</li>
-        </ul>
-      </div>
     </div>
   );
 }
