@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Solana test validator data
+test-ledger/
+*.keypair
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
