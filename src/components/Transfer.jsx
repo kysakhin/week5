@@ -305,7 +305,6 @@ export function Transfer() {
           />
           {insufficientFunds && (
             <p className="text-red-600 dark:text-red-400 text-sm mt-1 flex items-center">
-              <span className="mr-1">⚠️</span>
               Insufficient balance (need {((Number(amount || 0) * 1e9 + estimatedFee) / 1e9).toFixed(6)} SOL total)
             </p>
           )}
@@ -340,7 +339,7 @@ export function Transfer() {
             {insufficientFunds && (
               <div className="mt-2 pt-2 border-t border-red-200 dark:border-red-700">
                 <p className="text-red-800 dark:text-red-200 text-xs">
-                  💰 Available: {(balance / 1e9).toFixed(6)} SOL
+                  Available: {(balance / 1e9).toFixed(6)} SOL
                 </p>
               </div>
             )}
@@ -367,7 +366,6 @@ export function Transfer() {
             </div>
           ) : (
             <div className="flex items-center justify-center space-x-2">
-              <span>💸</span>
               <span>Send SOL</span>
             </div>
           )}

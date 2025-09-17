@@ -158,7 +158,6 @@ export function VerifySign() {
               </div>
             ) : (
               <div className="flex items-center justify-center space-x-2">
-                <span>🔍</span>
                 <span>Verify Signature</span>
               </div>
             )}

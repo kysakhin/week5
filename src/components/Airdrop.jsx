@@ -84,7 +84,6 @@ export function Airdrop() {
           </div>
         ) : (
           <div className="flex items-center space-x-2">
-            <span>💰</span>
             <span>Request 1 SOL</span>
           </div>
         )}

@@ -141,7 +141,6 @@ export function OffchainSign() {
               </div>
             ) : (
               <div className="flex items-center justify-center space-x-2">
-                <span>✍️</span>
                 <span>Sign Message</span>
               </div>
             )}
