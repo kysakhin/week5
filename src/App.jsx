@@ -23,7 +23,7 @@ export default function App() {
               <Route path="/sign" element={<OffchainSign />} />
               <Route path="/verify" element={<VerifySign />} />
               <Route path="/transfer" element={<Transfer />} />
-              {/* <Route path="/create-token" element={<CreateToken />} /> */}
+              <Route path="/create-token" element={<CreateToken />} />
             </Routes>
           </main>
         </div>
@@ -32,5 +32,3 @@ export default function App() {
     </SolanaProvider>
   );
 }
-
-

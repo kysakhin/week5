@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { toast } from "sonner";
 import {
@@ -6,20 +6,25 @@ import {
   TOKEN_2022_PROGRAM_ID,
   getMintLen,
   createInitializeMetadataPointerInstruction,
-  createInitializeMintInstruction
+  createInitializeMintInstruction,
+  TYPE_SIZE,
+  LENGTH_SIZE,
+  createMintToInstruction,
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync
 } from "@solana/spl-token";
 import { Keypair, SystemProgram, Transaction } from "@solana/web3.js";
-import { createInitializeInstruction } from "@solana/spl-token-metadata";
+import { createInitializeInstruction, pack } from "@solana/spl-token-metadata";
 
 export function CreateToken() {
-  const { publicKey, connected, signTransaction } = useWallet();
+  const { publicKey, connected, sendTransaction } = useWallet();
   const { connection } = useConnection();
 
   const [tokenForm, setTokenForm] = useState({
     name: "",
     symbol: "",
     description: "",
-    image: "",
+    metadataUri: "",
     decimals: 9,
     initialSupply: 1000000,
   });
@@ -28,6 +33,7 @@ export function CreateToken() {
   const [createdToken, setCreatedToken] = useState(null);
   const [error, setError] = useState(null);
   const [txHash, setTxHash] = useState(null);
+  const [balance, setBalance] = useState(null);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -44,7 +50,7 @@ export function CreateToken() {
       name: "",
       symbol: "",
       description: "",
-      image: "",
+      metadataUri: "",
       decimals: 9,
       initialSupply: 1000000,
     });
@@ -53,21 +59,26 @@ export function CreateToken() {
     setError(null);
   };
 
-  const createTokenMetadata = useCallback(() => {
-    return {
-      name: tokenForm.name,
-      symbol: tokenForm.symbol,
-      description: tokenForm.description,
-      image: tokenForm.image || "https://placehold.co/600x400?text=Token",
-      attributes: [],
-      properties: {
-        category: 'token',
-      }
-    };
-  }, [tokenForm]);
-
   // Form validation
   const isFormValid = tokenForm.name.trim() && tokenForm.symbol.trim() && tokenForm.decimals >= 0 && tokenForm.decimals <= 9 && tokenForm.initialSupply > 0;
+
+  // Fetch balance on component mount and when wallet connects
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (publicKey && connected) {
+        try {
+          const bal = await connection.getBalance(publicKey);
+          setBalance(bal);
+        } catch (error) {
+          setBalance(null);
+        }
+      } else {
+        setBalance(null);
+      }
+    };
+
+    fetchBalance();
+  }, [publicKey, connected, connection]);
 
   const createToken22 = useCallback(async () => {
     if (!publicKey) {
@@ -86,119 +97,140 @@ export function CreateToken() {
       setIsCreating(true);
       setError(null);
 
+      // Check current balance first
+      const balance = await connection.getBalance(publicKey);
+      const balanceInSOL = balance / 1000000000;
+      
+      if (balance === 0) {
+        throw new Error(`Insufficient balance. Current balance: ${balanceInSOL} SOL. Please get some devnet SOL from a faucet.`);
+      }
+
       // Generate a new mint keypair
       const mintKeypair = Keypair.generate();
 
-      // Create metadata JSON
-      const metadata = createTokenMetadata();
-      const metadataUri = "data:application/json;base64," + btoa(JSON.stringify(metadata));
+      // Create metadata object
+      const metadata = {
+        mint: mintKeypair.publicKey,
+        name: tokenForm.name,
+        symbol: tokenForm.symbol,
+        uri: tokenForm.metadataUri || 'https://cdn.100xdevs.com/metadata.json',
+        additionalMetadata: [],
+      };
 
-      // Define extensions for the token (MetadataPointer for on-chain metadata)
-      const extensions = [ExtensionType.MetadataPointer];
-
-      // Calculate the space required for mint account with extensions
-      const mintLen = getMintLen(extensions);
+      // Calculate space requirements
+      const mintLen = getMintLen([ExtensionType.MetadataPointer]);
+      const metadataLen = TYPE_SIZE + LENGTH_SIZE + pack(metadata).length;
 
       // Get minimum balance for rent exemption
-      const lamports = await connection.getMinimumBalanceForRentExemption(mintLen);
+      const lamports = await connection.getMinimumBalanceForRentExemption(mintLen + metadataLen);
 
-      // Create account instruction
-      const createAccountIx = SystemProgram.createAccount({
-        fromPubkey: publicKey,
-        newAccountPubkey: mintKeypair.publicKey,
-        space: mintLen,
-        lamports,
-        programId: TOKEN_2022_PROGRAM_ID,
-      });
-
-      // Initialize metadata pointer (points to the mint itself for on-chain metadata)
-      const initMetadataPtrIx = createInitializeMetadataPointerInstruction(
-        mintKeypair.publicKey, // mint
-        publicKey, // authority
-        mintKeypair.publicKey, // metadataAddress (points to mint for on-chain metadata)
-        TOKEN_2022_PROGRAM_ID,
-      );
-
-      // Initialize mint
-      const initMintIx = createInitializeMintInstruction(
-        mintKeypair.publicKey, // mint
-        tokenForm.decimals, // decimals
-        publicKey, // mintAuthority
-        publicKey, // freezeAuthority
-        TOKEN_2022_PROGRAM_ID,
-      );
-
-      // Initialize on-chain metadata
-      const initMetadataIx = createInitializeInstruction({
-        programId: TOKEN_2022_PROGRAM_ID,
-        mint: mintKeypair.publicKey,
-        metadata: mintKeypair.publicKey, // metadata stored on mint account
-        name: metadata.name,
-        symbol: metadata.symbol,
-        uri: metadataUri,
-        mintAuthority: publicKey,
-        updateAuthority: publicKey,
-      });
-
-      // Create transaction
+      // Create the token creation transaction
       const transaction = new Transaction().add(
-        createAccountIx,
-        initMetadataPtrIx,
-        initMintIx,
-        initMetadataIx,
+        SystemProgram.createAccount({
+          fromPubkey: publicKey,
+          newAccountPubkey: mintKeypair.publicKey,
+          space: mintLen,
+          lamports,
+          programId: TOKEN_2022_PROGRAM_ID,
+        }),
+        createInitializeMetadataPointerInstruction(
+          mintKeypair.publicKey, 
+          publicKey, 
+          mintKeypair.publicKey, 
+          TOKEN_2022_PROGRAM_ID
+        ),
+        createInitializeMintInstruction(
+          mintKeypair.publicKey, 
+          tokenForm.decimals, 
+          publicKey, 
+          null, 
+          TOKEN_2022_PROGRAM_ID
+        ),
+        createInitializeInstruction({
+          programId: TOKEN_2022_PROGRAM_ID,
+          mint: mintKeypair.publicKey,
+          metadata: mintKeypair.publicKey,
+          name: metadata.name,
+          symbol: metadata.symbol,
+          uri: metadata.uri,
+          mintAuthority: publicKey,
+          updateAuthority: publicKey,
+        }),
       );
 
-      // Get recent blockhash and set fee payer
-      const { blockhash } = await connection.getLatestBlockhash();
-      transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
-
-      // Sign with mint keypair (required for creating the mint account)
+      transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
       transaction.partialSign(mintKeypair);
 
-      // Request wallet to sign the transaction
-      if (!signTransaction) {
-        throw new Error("Wallet does not support transaction signing");
-      }
-      
-      const signedTx = await signTransaction(transaction);
-      
-      if (!signedTx) {
-        throw new Error("Failed to sign transaction - wallet may not support signing");
-      }
-
-      // Send and confirm the transaction
-      const txid = await connection.sendRawTransaction(signedTx.serialize());
-      
-      // Wait for confirmation
-      const confirmation = await connection.confirmTransaction({
-        signature: txid,
-        blockhash: blockhash,
-        lastValidBlockHeight: (await connection.getLatestBlockhash()).lastValidBlockHeight,
-      }, 'confirmed');
-
-      if (confirmation.value.err) {
-        throw new Error(`Transaction failed: ${confirmation.value.err}`);
-      }
-
-      console.log("Token created successfully:", {
-        mintAddress: mintKeypair.publicKey.toString(),
-        transaction: txid,
-      });
+      // Send the token creation transaction
+      const txid = await sendTransaction(transaction, connection);
       
       toast.success(`Token created successfully! Mint: ${mintKeypair.publicKey.toString()}`);
       setCreatedToken(mintKeypair.publicKey.toString());
       setTxHash(txid);
 
+      // Create associated token account
+      const associatedToken = getAssociatedTokenAddressSync(
+        mintKeypair.publicKey,
+        publicKey,
+        false,
+        TOKEN_2022_PROGRAM_ID,
+      );
+
+      const transaction2 = new Transaction().add(
+        createAssociatedTokenAccountInstruction(
+          publicKey,
+          associatedToken,
+          publicKey,
+          mintKeypair.publicKey,
+          TOKEN_2022_PROGRAM_ID,
+        ),
+      );
+
+      await sendTransaction(transaction2, connection);
+
+      // Mint initial supply to the creator
+      if (tokenForm.initialSupply > 0) {
+        const mintAmount = tokenForm.initialSupply * Math.pow(10, tokenForm.decimals);
+        const transaction3 = new Transaction().add(
+          createMintToInstruction(
+            mintKeypair.publicKey, 
+            associatedToken, 
+            publicKey, 
+            mintAmount, 
+            [], 
+            TOKEN_2022_PROGRAM_ID
+          )
+        );
+
+        await sendTransaction(transaction3, connection);
+        toast.success(`Minted ${tokenForm.initialSupply} tokens to your wallet!`);
+      }
+
     } catch (error) {
-      console.error("Token creation error:", error);
-      const errorMessage = error.message || error.toString();
+      let errorMessage = error.message || error.toString();
+      
+      // Handle specific Solana transaction errors
+      if (error.name === 'SendTransactionError') {
+        try {
+          const logs = await error.getLogs();
+          errorMessage = `Transaction failed. Check console for detailed logs. Error: ${error.message}`;
+        } catch (logError) {
+          // Ignore log error
+        }
+      }
+      
+      // Handle blockhash expiration
+      if (errorMessage.includes('Blockhash not found') || errorMessage.includes('blockhash')) {
+        errorMessage = "Transaction failed due to expired blockhash. This is usually a network timing issue. Please try again.";
+      }
+      
       toast.error(`Token creation failed: ${errorMessage}`);
       setError(errorMessage);
     } finally {
       setIsCreating(false);
     }
-  }, [publicKey, connection, tokenForm, createTokenMetadata]);
+  }, [publicKey, connection, tokenForm, sendTransaction]);
 
   if (!connected) {
     return (
@@ -222,9 +254,58 @@ export function CreateToken() {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-2xl mx-auto px-4">
+        {/* Network Indicator */}
+        <div className="mb-4 text-center">
+          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+            <div className="w-2 h-2 bg-orange-400 rounded-full mr-2"></div>
+            Connected to Devnet
+          </span>
+        </div>
+        
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Token</h1>
-          <p className="text-gray-600 mb-8">Create your own SPL Token with metadata on Solana</p>
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">Create New Token</h1>
+              <p className="text-gray-600">Create your own SPL Token with metadata on Solana</p>
+            </div>
+            
+            {balance !== null && (
+              <div className="text-right">
+                <p className="text-sm text-gray-500">Current Balance</p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {(balance / 1000000000).toFixed(6)} SOL
+                </p>
+                <p className="text-xs text-gray-400">
+                  ({balance.toLocaleString()} lamports)
+                </p>
+              </div>
+            )}
+          </div>
+
+          {balance !== null && balance < 10000000 && ( // Less than 0.01 SOL
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex">
+                <svg className="w-5 h-5 text-yellow-400 mr-2 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <div>
+                  <h3 className="text-yellow-800 font-medium">Low Balance Warning</h3>
+                  <p className="text-yellow-700 text-sm mt-1">
+                    Your balance is very low. Creating a token requires approximately 0.002-0.003 SOL for rent exemption and fees.
+                    <br />
+                    <a 
+                      href="https://faucet.solana.com" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="underline hover:text-yellow-900"
+                    >
+                      Get devnet SOL from the faucet
+                    </a>
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={(e) => { e.preventDefault(); createToken22(); }} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -278,18 +359,21 @@ export function CreateToken() {
             </div>
 
             <div>
-              <label htmlFor="image" className="block text-sm font-medium text-gray-700 mb-2">
-                Image URL
+              <label htmlFor="metadataUri" className="block text-sm font-medium text-gray-700 mb-2">
+                Metadata URI
               </label>
               <input
                 type="url"
-                id="image"
-                name="image"
-                value={tokenForm.image}
+                id="metadataUri"
+                name="metadataUri"
+                value={tokenForm.metadataUri}
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                placeholder="https://example.com/token-image.png"
+                placeholder="https://example.com/metadata.json"
               />
+              <p className="text-sm text-gray-500 mt-1">
+                URL to a JSON file containing token metadata (name, description, image, etc.)
+              </p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
