@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { useWallet } from "@solana/wallet-adapter-react";
+import AllTokenBalances from "./AllTokenBalances";
 
 export function Home() {
   const { connected, publicKey } = useWallet();
@@ -72,6 +73,7 @@ export function Home() {
             </>
           )}
         </div>
+        <AllTokenBalances />
       </div>
 
       {/* Features Grid */}
