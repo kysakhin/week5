@@ -1,12 +1,53 @@
-# React + Vite
+# KNOWN ISSUES
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+1. transfering sol. the ./src/components/Transfer.jsx file. 
+Problem:
+"This transaction reverted during simulation. Funds may be lost if submitted"
+how to recreate:
 
-Currently, two official plugins are available:
+a. connect PHANTOM wallet. try to transfer sol. (no issue on backpack)
+b. tranfer some amount to another wallet
+c. error is shown on the popup that phantom shows.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+assumptions:
+maybe the simulate transaction function must be accepting different parameters. the transaction should be of the modern versioned transaction function. 
+and also pass in params.
 
-## Expanding the ESLint configuration
+how to fix:
+get rid of the legacy transaction function
+```javascript
+// Build transaction
+const messageV0 = new TransactionMessage({
+  payerKey: publicKey,
+  recentBlockhash: blockhash,
+  instructions: [
+    SystemProgram.transfer({...})
+  ],
+}).compileToV0Message();
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+const txn = new VersionedTransaction(messageV0);
+
+// Simulate to get units
+const simulation = await connection.simulateTransaction(txn, {
+  sigVerify: false,
+});
+
+const unitsUsed = simulation.value.unitsConsumed;
+
+// Rebuild with compute budget
+const finalMessage = new TransactionMessage({
+  payerKey: publicKey,
+  recentBlockhash: blockhash,
+  instructions: [
+    ComputeBudgetProgram.setComputeUnitLimit({ 
+      units: Math.ceil(unitsUsed * 1.1) 
+    }),
+    ComputeBudgetProgram.setComputeUnitPrice({ 
+      microLamports: 1 
+    }),
+    SystemProgram.transfer({...})
+  ],
+}).compileToV0Message();
+
+const finalTxn = new VersionedTransaction(finalMessage);
+```
