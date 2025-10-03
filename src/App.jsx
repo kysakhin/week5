@@ -6,8 +6,9 @@ import { Navbar } from "./components/Navbar";
 import { Airdrop } from "./components/Airdrop";
 import { OffchainSign } from "./components/OffchainSIgn";
 import { VerifySign } from "./components/VerifySign";
-import { Transfer } from "./components/Transfer";
+import { Transfer } from "./components/Transfer_new";
 import { CreateToken } from "./components/CreateToken";
+import { NewTransfer } from "./components/New_Transfer";
 import { Home } from "./components/Home";
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
               <Route path="/airdrop" element={<Airdrop />} />
               <Route path="/sign" element={<OffchainSign />} />
               <Route path="/verify" element={<VerifySign />} />
-              <Route path="/transfer" element={<Transfer />} />
+              <Route path="/transfer" element={<NewTransfer />} />
               <Route path="/create-token" element={<CreateToken />} />
             </Routes>
           </main>

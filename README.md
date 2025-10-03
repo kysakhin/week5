@@ -1,20 +1,21 @@
 # KNOWN ISSUES
 
-1. transfering sol. the ./src/components/Transfer.jsx file. 
-Problem:
-"This transaction reverted during simulation. Funds may be lost if submitted"
-how to recreate:
+1. transfering sol. the ./src/components/Transfer.jsx file.
+   Problem:
+   "This transaction reverted during simulation. Funds may be lost if submitted"
+   how to recreate:
 
 a. connect PHANTOM wallet. try to transfer sol. (no issue on backpack)
 b. tranfer some amount to another wallet
 c. error is shown on the popup that phantom shows.
 
 assumptions:
-maybe the simulate transaction function must be accepting different parameters. the transaction should be of the modern versioned transaction function. 
+maybe the simulate transaction function must be accepting different parameters. the transaction should be of the modern versioned transaction function.
 and also pass in params.
 
 how to fix:
 get rid of the legacy transaction function
+
 ```javascript
 // Build transaction
 const messageV0 = new TransactionMessage({
@@ -39,11 +40,11 @@ const finalMessage = new TransactionMessage({
   payerKey: publicKey,
   recentBlockhash: blockhash,
   instructions: [
-    ComputeBudgetProgram.setComputeUnitLimit({ 
-      units: Math.ceil(unitsUsed * 1.1) 
+    ComputeBudgetProgram.setComputeUnitLimit({
+      units: Math.ceil(unitsUsed * 1.1)
     }),
-    ComputeBudgetProgram.setComputeUnitPrice({ 
-      microLamports: 1 
+    ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: 1
     }),
     SystemProgram.transfer({...})
   ],
@@ -51,3 +52,7 @@ const finalMessage = new TransactionMessage({
 
 const finalTxn = new VersionedTransaction(finalMessage);
 ```
+
+references:
+[Requesting optimal compute](https://solana.com/developers/guides/advanced/how-to-request-optimal-compute)
+[Simulating transaction](https://solana.com/docs/rpc/http/simulatetransaction)

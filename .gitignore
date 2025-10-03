@@ -26,3 +26,9 @@ test-ledger/
 *.njsproj
 *.sln
 *.sw?
+
+# Environment files
+.env*.local
+.env.local
+.env.development.local
+.env
